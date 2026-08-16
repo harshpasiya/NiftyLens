@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NiftyLens — AI-Powered Trading Screener</title>
+<meta name="description" content="AI-powered NSE trading screener with real-time swing & intraday signals across 200 volatile mid-cap stocks">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0 }
+  :root {
+    --bg: #0a0e1a;
+    --bg-subtle: #0f1629;
+    --surface: rgba(20, 27, 50, 0.7);
+    --surface-solid: #141b32;
+    --glass: rgba(22, 33, 62, 0.55);
+    --glass-border: rgba(56, 189, 248, 0.12);
+    --glass-hover: rgba(56, 189, 248, 0.08);
+    --border: rgba(51, 65, 85, 0.5);
+    --border-bright: rgba(56, 189, 248, 0.25);
+    --text: #e2e8f0;
+    --text-secondary: #94a3b8;
+    --muted: #64748b;
+    --accent: #38bdf8;
+    --accent-glow: rgba(56, 189, 248, 0.15);
+    --accent-strong: #7dd3fc;
+    --cyan: #22d3ee;
+    --green: #34d399;
+    --green-dim: rgba(52, 211, 153, 0.15);
+    --red: #f87171;
+    --red-dim: rgba(248, 113, 113, 0.15);
+    --yellow: #fbbf24;
+    --yellow-dim: rgba(251, 191, 36, 0.12);
+    --orange: #fb923c;
+    --purple: #a78bfa;
+    --radius: 14px;
+    --radius-sm: 8px;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+    --shadow-glow: 0 0 20px rgba(56, 189, 248, 0.1);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Animated background ─────────────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, rgba(139, 92, 246, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ──────────────────────────────────────────────────────────── */
+  header {
+    position: relative;
+    z-index: 10;
+    background: var(--glass);
+    backdrop-filter: blur(20px) saturate(1.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.4;
+  }
+
+  .logo {
+    font-size: 22px;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+  }
+  .logo-sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .regime-badge {
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    border: 1px solid transparent;
+    transition: all 0.3s ease;
+  }
+  .regime-trending_up    { background: var(--green-dim); color: var(--green); border-color: rgba(52,211,153,0.3) }
+  .regime-trending_down  { background: var(--red-dim); color: var(--red); border-color: rgba(248,113,113,0.3) }
+  .regime-sideways       { background: var(--yellow-dim); color: var(--yellow); border-color: rgba(251,191,36,0.3) }
+  .regime-volatile       { background: rgba(167,139,250,0.15); color: var(--purple); border-color: rgba(167,139,250,0.3) }
+  .regime-unknown        { background: rgba(100,116,139,0.15); color: var(--muted); border-color: var(--border) }
+
+  .conn-row { display: flex; align-items: center; gap: 8px; margin-left: auto }
+  .conn-row input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font);
+    font-size: 12px;
+    width: 200px;
+    transition: border-color 0.2s;
+  }
+  .conn-row input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-glow) }
+
+  .btn {
+    padding: 7px 16px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #0ea5e9);
+    color: #0a0e1a;
+    border: none;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(56,189,248,0.3) }
+  .btn-refresh { background: var(--glass); color: var(--text); border-color: var(--border) }
+  .btn-refresh:hover { background: var(--glass-hover); border-color: var(--accent) }
+  .btn-kill {
+    background: var(--red-dim);
+    color: var(--red);
+    border-color: rgba(248,113,113,0.3);
+  }
+  .btn-kill:hover { background: rgba(248,113,113,0.25) }
+
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: all 0.3s }
+  .dot.live {
+    background: var(--green);
+    box-shadow: 0 0 0 3px var(--green-dim), 0 0 12px rgba(52,211,153,0.4);
+    animation: pulse 2s ease infinite;
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 3px var(--green-dim), 0 0 12px rgba(52,211,153,0.4) }
+    50% { box-shadow: 0 0 0 6px rgba(52,211,153,0.05), 0 0 20px rgba(52,211,153,0.2) }
+  }
+
+  /* ── Sideways Banner ─────────────────────────────────────────────────── */
+  .sideways-banner {
+    background: linear-gradient(90deg, rgba(251,191,36,0.12), rgba(251,191,36,0.06), rgba(251,191,36,0.12));
+    color: var(--yellow);
+    text-align: center;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 13px;
+    display: none;
+    border-bottom: 1px solid rgba(251,191,36,0.2);
+    animation: bannerPulse 3s ease infinite;
+    position: relative;
+    z-index: 10;
+  }
+  @keyframes bannerPulse {
+    0%,100% { background-position: 0% 50% }
+    50% { background-position: 100% 50% }
+  }
+
+  /* ── Market Stats Bar ────────────────────────────────────────────────── */
+  .stats-bar {
+    display: flex;
+    gap: 0;
+    padding: 0 28px;
+    background: var(--glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 10;
+  }
+  .stat {
+    font-size: 11px;
+    color: var(--muted);
+    padding: 10px 18px;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    letter-spacing: 0.3px;
+  }
+  .stat:last-child { border-right: none; margin-left: auto }
+  .stat strong {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .stat .label { text-transform: uppercase; letter-spacing: 1px; font-size: 9px }
+
+  /* VIX Gauge */
+  .vix-gauge {
+    width: 60px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+  .vix-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease, background 0.6s;
+  }
+
+  /* ── Tabs ─────────────────────────────────────────────────────────────── */
+  .tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 28px;
+    background: var(--glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 10;
+  }
+  .tab {
+    padding: 12px 22px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.25s ease;
+    position: relative;
+    letter-spacing: 0.2px;
+  }
+  .tab:hover { color: var(--text-secondary) }
+  .tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 20%;
+    right: 20%;
+    height: 2px;
+    background: var(--accent);
+    filter: blur(4px);
+  }
+  .tab-count {
+    font-size: 10px;
+    font-weight: 700;
+    background: var(--accent);
+    color: var(--bg);
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-left: 6px;
+    min-width: 18px;
+    text-align: center;
+    display: inline-block;
+  }
+
+  /* ── Main Layout ─────────────────────────────────────────────────────── */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 0;
+    height: calc(100vh - 145px);
+    position: relative;
+    z-index: 5;
+  }
+  .panel { overflow-y: auto; padding: 20px 24px }
+  .side-panel {
+    border-left: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    background: var(--glass);
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+  }
+
+  /* ── Sector Filter Bar ───────────────────────────────────────────────── */
+  .sector-bar {
+    display: flex;
+    gap: 6px;
+    padding: 12px 0;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    margin-bottom: 12px;
+  }
+  .sector-bar::-webkit-scrollbar { height: 0 }
+  .sector-chip {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--glass);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+  .sector-chip:hover { border-color: var(--accent); color: var(--text) }
+  .sector-chip.active {
+    background: var(--accent-glow);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ── Setup Cards ─────────────────────────────────────────────────────── */
+  .setups-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px }
+  .setups-header h2 { font-size: 15px; font-weight: 700; letter-spacing: -0.3px }
+
+  .setup-card {
+    background: var(--glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .setup-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .setup-card:hover {
+    border-color: var(--border-bright);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-glow);
+  }
+  .setup-card:hover::before { opacity: 1 }
+  .setup-card.selected {
+    border-color: var(--accent);
+    background: rgba(56, 189, 248, 0.05);
+    box-shadow: 0 0 0 1px var(--accent-glow), var(--shadow-glow);
+  }
+  .setup-card.selected::before { opacity: 1 }
+
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px }
+  .symbol-row { display: flex; align-items: center; gap: 8px }
+  .symbol { font-size: 16px; font-weight: 800; letter-spacing: -0.3px }
+  .sector-tag {
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--cyan);
+    background: rgba(34,211,238,0.1);
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .setup-type-tag {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-top: 3px;
+    letter-spacing: 0.3px;
+  }
+
+  .score-pill {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+    position: relative;
+  }
+  .score-A {
+    background: var(--green-dim);
+    color: var(--green);
+    box-shadow: 0 0 12px rgba(52,211,153,0.2);
+  }
+  .score-B { background: rgba(34,211,238,0.12); color: var(--cyan) }
+  .score-C { background: var(--yellow-dim); color: var(--yellow) }
+  .score-D { background: var(--red-dim); color: var(--red) }
+  .score-F { background: var(--red-dim); color: var(--red) }
+
+  .card-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .metric {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .metric .val { color: var(--text); font-weight: 600; font-size: 13px }
+  .metric .lbl { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px }
+
+  .card-rationale {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+
+  .card-footer {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .news-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 10px;
+  }
+  .news-positive { background: var(--green-dim); color: var(--green) }
+  .news-negative { background: var(--red-dim); color: var(--red) }
+  .news-neutral  { background: rgba(100,116,139,0.15); color: var(--muted) }
+
+  .pattern-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 10px;
+    background: rgba(167,139,250,0.12);
+    color: var(--purple);
+  }
+
+  /* R:R Bar */
+  .rr-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .rr-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--green));
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* ── AI Analysis Box ─────────────────────────────────────────────────── */
+  .ai-box {
+    background: linear-gradient(135deg, rgba(56,189,248,0.05), rgba(139,92,246,0.03));
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 18px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+  .ai-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--purple), var(--cyan));
+    animation: aiGradient 4s linear infinite;
+    background-size: 200% 100%;
+  }
+  @keyframes aiGradient {
+    0% { background-position: 0% 50% }
+    100% { background-position: 200% 50% }
+  }
+  .ai-box h3 {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .ai-text {
+    font-size: 13px;
+    line-height: 1.75;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    max-height: 350px;
+    overflow-y: auto;
+  }
+  .ai-refresh { font-size: 10px; color: var(--muted); margin-top: 10px }
+
+  /* ── Order Panel ─────────────────────────────────────────────────────── */
+  .order-section {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .order-section h4 {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+  .order-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(51,65,85,0.3);
+  }
+  .order-row:last-child { border: none }
+  .order-row .lbl { color: var(--muted) }
+
+  .btn-place {
+    width: 100%;
+    margin-top: 14px;
+    padding: 11px;
+    background: linear-gradient(135deg, var(--green), #10b981);
+    color: #0a0e1a;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-family: var(--font);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+  .btn-place:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(52,211,153,0.3) }
+  .btn-place:disabled { opacity: 0.3; cursor: not-allowed; transform: none; box-shadow: none }
+
+  /* ── Sideways Layers ─────────────────────────────────────────────────── */
+  .filter-layers {
+    background: var(--glass);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-top: 16px;
+  }
+  .filter-layers h4 {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 10px;
+  }
+  .layer-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 12px;
+  }
+  .layer-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    transition: all 0.3s;
+  }
+  .layer-dot.on  { background: var(--red); box-shadow: 0 0 6px rgba(248,113,113,0.5) }
+  .layer-dot.off { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,0.3) }
+
+  /* ── Modals ──────────────────────────────────────────────────────────── */
+  .modal-bg {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-bg.open { display: flex }
+  .modal {
+    background: var(--surface-solid);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    padding: 28px;
+    width: 420px;
+    max-width: 90vw;
+    box-shadow: var(--shadow-lg);
+    animation: modalIn 0.2s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.95) } to { opacity: 1; transform: scale(1) } }
+  .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; letter-spacing: -0.3px }
+  .modal-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal-row:last-of-type { border: none }
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px }
+  .modal-actions button { flex: 1; padding: 10px }
+  .modal-confirm-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 14px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font);
+    font-size: 13px;
+    margin-top: 12px;
+  }
+
+  /* ── Positions ───────────────────────────────────────────────────────── */
+  .pos-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--glass);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    font-size: 13px;
+    transition: all 0.2s;
+  }
+  .pos-row:hover { border-color: var(--border-bright) }
+  .pos-pnl { font-weight: 700 }
+  .pos-pnl.pos { color: var(--green) }
+  .pos-pnl.neg { color: var(--red) }
+
+  /* ── Loading & Empty ─────────────────────────────────────────────────── */
+  .loading { color: var(--muted); font-size: 13px; text-align: center; padding: 50px 20px }
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg) } }
+
+  .empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  .empty-state .icon { font-size: 40px; margin-bottom: 16px; opacity: 0.4 }
+  .empty-state .title { font-size: 15px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px }
+  .empty-state .sub { font-size: 12px }
+
+  /* ── Scrollbar ───────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px }
+  ::-webkit-scrollbar-track { background: transparent }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px }
+
+  /* ── Responsive ──────────────────────────────────────────────────────── */
+  @media (max-width: 1100px) {
+    .main { grid-template-columns: 1fr }
+    .side-panel { display: none }
+  }
+  @media (max-width: 700px) {
+    header { padding: 10px 16px }
+    .stats-bar { padding: 0 16px }
+    .tabs { padding: 0 16px }
+    .panel { padding: 16px }
+    .conn-row input { width: 140px }
+  }
+
+  /* ── Animations ──────────────────────────────────────────────────────── */
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+  .fade-in { animation: fadeIn 0.35s ease forwards }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">NiftyLens<span class="logo-sub">AI Trading Screener</span></div>
+  <div id="regime-badge" class="regime-badge regime-unknown">Regime: —</div>
+  <div class="dot" id="live-dot"></div>
+  <div class="conn-row">
+    <input type="text" id="backend-url" value="http://localhost:8000" placeholder="Backend URL" spellcheck="false">
+    <button class="btn btn-primary" onclick="connect()">Connect</button>
+    <button class="btn btn-refresh" onclick="refreshAll()" title="Force re-scan">↻</button>
+    <button class="btn btn-kill" onclick="openKillSwitch()">⚡ Kill</button>
+  </div>
+</header>
+
+<!-- Sideways Banner -->
+<div id="sideways-banner" class="sideways-banner">
+  ⚠️ SIDEWAYS MARKET — All signals paused. 5-layer filter active — waiting for directional trend.
+</div>
+
+<!-- Stats Bar -->
+<div class="stats-bar">
+  <div class="stat">
+    <span class="label">Swing</span>
+    <strong id="swing-count">—</strong>
+  </div>
+  <div class="stat">
+    <span class="label">Intraday</span>
+    <strong id="intra-count">—</strong>
+  </div>
+  <div class="stat">
+    <span class="label">ADX</span>
+    <strong id="stat-adx">—</strong>
+  </div>
+  <div class="stat">
+    <span class="label">India VIX</span>
+    <strong id="stat-vix">—</strong>
+    <div class="vix-gauge"><div class="vix-fill" id="vix-fill" style="width:0;background:var(--green)"></div></div>
+  </div>
+  <div class="stat">
+    <span class="label">FII Net</span>
+    <strong id="stat-fii">—</strong>
+  </div>
+  <div class="stat">
+    <span class="label">Capital</span>
+    <strong id="stat-capital">₹—</strong>
+  </div>
+  <div class="stat">
+    <span class="label">Universe</span>
+    <strong id="stat-universe">198</strong>
+  </div>
+  <div class="stat">
+    <span class="label">Last Scan</span>
+    <strong id="last-scan">—</strong>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('swing')">📈 Swing<span class="tab-count" id="swing-badge">0</span></div>
+  <div class="tab" onclick="switchTab('intraday')">⚡ Intraday<span class="tab-count" id="intra-badge">0</span></div>
+  <div class="tab" onclick="switchTab('positions')">📂 Positions</div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Left: Setup list -->
+  <div class="panel" id="main-panel">
+    <!-- Sector Filter -->
+    <div class="sector-bar" id="sector-bar">
+      <div class="sector-chip active" onclick="filterSector('all')">All</div>
+    </div>
+
+    <div id="tab-swing">
+      <div class="setups-header">
+        <h2>Swing Setups — Volatile Mid-Caps</h2>
+      </div>
+      <div id="swing-list">
+        <div class="empty-state">
+          <div class="icon">🔭</div>
+          <div class="title">Connect to Backend</div>
+          <div class="sub">Enter your backend URL and click Connect to start scanning</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-intraday" style="display:none">
+      <div class="setups-header">
+        <h2>Intraday — ORB · VWAP · Pullback</h2>
+      </div>
+      <div id="intraday-list">
+        <div class="empty-state">
+          <div class="icon">⚡</div>
+          <div class="title">Connect to Backend</div>
+          <div class="sub">Intraday setups scan during market hours (9:15 AM – 3:20 PM IST)</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-positions" style="display:none">
+      <div class="setups-header"><h2>Open Positions</h2></div>
+      <div id="positions-list">
+        <div class="empty-state">
+          <div class="icon">📂</div>
+          <div class="title">No Positions</div>
+          <div class="sub">Your active CNC and MIS positions will appear here</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: AI Analysis + Order Panel -->
+  <div class="side-panel">
+    <div class="ai-box">
+      <h3>🤖 AI Deep Analysis</h3>
+      <div class="ai-text" id="ai-text">Click any setup card to load Claude AI analysis with trade plan, key risks, and entry/exit rationale.</div>
+      <div class="ai-refresh" id="ai-updated"></div>
+    </div>
+
+    <div id="order-panel" style="display:none">
+      <div class="order-section">
+        <h4>Trade Setup</h4>
+        <div id="order-rows"></div>
+        <button class="btn-place" id="place-btn" onclick="openOrderModal()">Place Order</button>
+      </div>
+    </div>
+
+    <!-- 5-Layer Filter Status -->
+    <div class="filter-layers" id="filter-layers">
+      <h4>Sideways Filter (5 Layers)</h4>
+      <div class="layer-row"><span>ADX &lt; 25</span><span class="layer-dot off" id="layer-adx"></span></div>
+      <div class="layer-row"><span>EMA Slope &lt; 2°</span><span class="layer-dot off" id="layer-ema"></span></div>
+      <div class="layer-row"><span>BB Width &lt; 0.05</span><span class="layer-dot off" id="layer-bb"></span></div>
+      <div class="layer-row"><span>Volume Declining</span><span class="layer-dot off" id="layer-vol"></span></div>
+      <div class="layer-row"><span>AI Regime: Sideways</span><span class="layer-dot off" id="layer-ai"></span></div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="filter-layers">
+        <h4>Macro Summary</h4>
+        <div id="macro-text" style="font-size:12px;color:var(--text-secondary);line-height:1.6">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Order Confirm Modal -->
+<div class="modal-bg" id="order-modal">
+  <div class="modal">
+    <h3>Confirm Order — <span id="modal-symbol"></span></h3>
+    <div id="modal-details"></div>
+    <div class="modal-actions">
+      <button class="btn btn-refresh" onclick="closeModal('order-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmOrder()">✓ Confirm Trade</button>
+    </div>
+  </div>
+</div>
+
+<!-- Kill Switch Modal -->
+<div class="modal-bg" id="kill-modal">
+  <div class="modal">
+    <h3 style="color:var(--red)">⚡ Emergency Kill Switch</h3>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">This will square off ALL open positions at MARKET price immediately. You will get slippage.</p>
+    <p style="font-size:13px;color:var(--red);font-weight:600">Type CONFIRM to proceed:</p>
+    <input type="text" class="modal-confirm-input" id="kill-confirm-input" placeholder="Type CONFIRM" autocomplete="off">
+    <div class="modal-actions">
+      <button class="btn btn-refresh" onclick="closeModal('kill-modal')">Cancel</button>
+      <button class="btn btn-kill" onclick="executeKillSwitch()">Execute Kill Switch</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let backendUrl = 'http://localhost:8000'
+let connected = false
+let currentTab = 'swing'
+let selectedSetup = null
+let currentSetupForOrder = null
+let swingData = []
+let intradayData = []
+let regime = {}
+let sectorFilter = 'all'
+let allSectors = []
+let scanInterval = null
+let intraInterval = null
+
+// ─── Connect ──────────────────────────────────────────────────────────────────
+async function connect() {
+  backendUrl = document.getElementById('backend-url').value.replace(/\/$/, '')
+  try {
+    const r = await fetch(`${backendUrl}/`)
+    if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    const data = await r.json()
+    connected = true
+    document.getElementById('live-dot').classList.add('live')
+    document.getElementById('stat-capital').textContent = '₹' + (data.capital || 0).toLocaleString('en-IN')
+    loadSectors()
+    startPolling()
+    await refreshAll()
+  } catch (e) {
+    alert('Cannot connect to backend at ' + backendUrl + '\n\nMake sure uvicorn is running:\nuvicorn screener_engine:app --host 0.0.0.0 --port 8000')
+  }
+}
+
+function startPolling() {
+  if (scanInterval) clearInterval(scanInterval)
+  if (intraInterval) clearInterval(intraInterval)
+  scanInterval  = setInterval(loadSwing,    300_000)
+  intraInterval = setInterval(loadIntraday,  60_000)
+  setInterval(loadRegime, 300_000)
+  setInterval(loadSidewaysStatus, 300_000)
+}
+
+async function refreshAll() {
+  if (!connected) return
+  await Promise.all([loadRegime(), loadSwing(), loadIntraday(), loadPositions(), loadSidewaysStatus()])
+}
+
+// ─── Loaders ─────────────────────────────────────────────────────────────────
+async function loadRegime() {
+  try {
+    const r = await fetch(`${backendUrl}/api/regime`)
+    regime = await r.json()
+
+    const badge = document.getElementById('regime-badge')
+    const regName = (regime.regime || 'unknown').replace('_', ' ')
+    badge.textContent = regName.toUpperCase()
+    badge.className = 'regime-badge regime-' + (regime.regime || 'unknown')
+
+    document.getElementById('stat-adx').textContent = regime.adx ? regime.adx.toFixed(1) : '—'
+
+    // VIX with gauge
+    const vix = regime.vix || 0
+    document.getElementById('stat-vix').textContent = vix ? vix.toFixed(1) : '—'
+    const vixPct = Math.min(vix / 35 * 100, 100)
+    const vixFill = document.getElementById('vix-fill')
+    vixFill.style.width = vixPct + '%'
+    vixFill.style.background = vix < 15 ? 'var(--green)' : vix < 22 ? 'var(--yellow)' : 'var(--red)'
+
+    // FII
+    const fii = regime.fii_net_cr
+    if (fii != null) {
+      const fiiStr = (fii >= 0 ? '+' : '') + (fii).toFixed(0) + 'Cr'
+      const fiiEl = document.getElementById('stat-fii')
+      fiiEl.textContent = fiiStr
+      fiiEl.style.color = fii >= 0 ? 'var(--green)' : 'var(--red)'
+    }
+
+    // Macro summary
+    document.getElementById('macro-text').textContent = regime.macro_summary || '—'
+
+    // Sideways banner
+    document.getElementById('sideways-banner').style.display = (regime.trade_ok === false) ? 'block' : 'none'
+  } catch (e) { /* silent */ }
+}
+
+async function loadSidewaysStatus() {
+  try {
+    const r = await fetch(`${backendUrl}/api/sideways`)
+    const data = await r.json()
+    const layers = data.layers || {}
+    setLayerDot('layer-adx', layers.adx_low)
+    setLayerDot('layer-ema', layers.ema_flat)
+    setLayerDot('layer-bb', layers.bb_squeeze)
+    setLayerDot('layer-vol', layers.vol_declining)
+    setLayerDot('layer-ai', layers.ai_sideways)
+  } catch (e) { /* silent */ }
+}
+
+function setLayerDot(id, active) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.className = 'layer-dot ' + (active ? 'on' : 'off')
+}
+
+async function loadSectors() {
+  try {
+    const r = await fetch(`${backendUrl}/api/sectors`)
+    const data = await r.json()
+    allSectors = Object.keys(data.sectors || {})
+    document.getElementById('stat-universe').textContent = data.total_universe || 198
+    renderSectorBar()
+  } catch (e) { /* silent */ }
+}
+
+function renderSectorBar() {
+  const bar = document.getElementById('sector-bar')
+  bar.innerHTML = `<div class="sector-chip ${sectorFilter === 'all' ? 'active' : ''}" onclick="filterSector('all')">All</div>`
+    + allSectors.map(s =>
+      `<div class="sector-chip ${sectorFilter === s ? 'active' : ''}" onclick="filterSector('${s}')">${s}</div>`
+    ).join('')
+}
+
+function filterSector(sector) {
+  sectorFilter = sector
+  renderSectorBar()
+  if (currentTab === 'swing') renderSetups('swing-list', swingData, 'swing')
+  if (currentTab === 'intraday') renderSetups('intraday-list', intradayData, 'intraday')
+}
+
+async function loadSwing() {
+  if (!connected) return
+  try {
+    const r = await fetch(`${backendUrl}/api/swing`)
+    const data = await r.json()
+    swingData = data.setups || []
+    document.getElementById('swing-count').textContent = swingData.length
+    document.getElementById('swing-badge').textContent = swingData.length
+    if (currentTab === 'swing') renderSetups('swing-list', swingData, 'swing')
+    document.getElementById('last-scan').textContent = new Date().toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'})
+  } catch (e) { console.error('loadSwing:', e) }
+}
+
+async function loadIntraday() {
+  if (!connected) return
+  try {
+    const r = await fetch(`${backendUrl}/api/intraday`)
+    const data = await r.json()
+    intradayData = data.setups || []
+    document.getElementById('intra-count').textContent = intradayData.length
+    document.getElementById('intra-badge').textContent = intradayData.length
+    if (currentTab === 'intraday') renderSetups('intraday-list', intradayData, 'intraday')
+  } catch (e) { console.error('loadIntraday:', e) }
+}
+
+async function loadPositions() {
+  if (!connected) return
+  try {
+    const r = await fetch(`${backendUrl}/api/positions`)
+    const data = await r.json()
+    renderPositions(data.positions || [])
+  } catch (e) { /* silent */ }
+}
+
+// ─── Render ───────────────────────────────────────────────────────────────────
+function renderSetups(containerId, setups, type) {
+  const container = document.getElementById(containerId)
+  let filtered = setups
+  if (sectorFilter !== 'all') {
+    filtered = setups.filter(s => s.sector === sectorFilter)
+  }
+
+  if (!filtered.length) {
+    const reason = sectorFilter !== 'all'
+      ? `No ${type} setups in ${sectorFilter} sector.`
+      : regime.trade_ok === false
+        ? '⚠️ Market is sideways — signals paused.'
+        : 'Scanning… check back soon.'
+    container.innerHTML = `<div class="empty-state fade-in"><div class="icon">${type === 'swing' ? '📊' : '⚡'}</div><div class="title">No Setups Found</div><div class="sub">${reason}</div></div>`
+    return
+  }
+
+  container.innerHTML = filtered.map((s, i) => {
+    const realIdx = setups.indexOf(s)
+    const risk = s.entry - s.stop
+    const rr = risk > 0 ? ((s.target - s.entry) / risk).toFixed(1) : '—'
+    const rrPct = Math.min(parseFloat(rr) / 4 * 100, 100)
+    const setupLabel = (s.setup_type || '').replace(/_/g, ' ').toUpperCase()
+
+    return `
+    <div class="setup-card fade-in" id="card-${realIdx}" onclick="selectSetup(${realIdx}, '${type}')" style="animation-delay:${i * 0.04}s">
+      <div class="card-top">
+        <div>
+          <div class="symbol-row">
+            <span class="symbol">${s.symbol}</span>
+            ${s.sector ? `<span class="sector-tag">${s.sector}</span>` : ''}
+          </div>
+          <div class="setup-type-tag">${setupLabel} · R:R ${rr}×</div>
+        </div>
+        <div style="text-align:right">
+          <div class="score-pill score-${s.grade}">${s.score} · ${s.grade}</div>
+        </div>
+      </div>
+      <div class="card-metrics">
+        <div class="metric"><span class="lbl">Price</span><span class="val">₹${s.price?.toFixed(2)}</span></div>
+        <div class="metric"><span class="lbl">Entry</span><span class="val">₹${s.entry?.toFixed(2)}</span></div>
+        <div class="metric"><span class="lbl">Stop</span><span class="val" style="color:var(--red)">₹${s.stop?.toFixed(2)}</span></div>
+        <div class="metric"><span class="lbl">Target</span><span class="val" style="color:var(--green)">₹${s.target?.toFixed(2)}</span></div>
+        <div class="metric"><span class="lbl">RSI</span><span class="val">${s.rsi}</span></div>
+        <div class="metric"><span class="lbl">ADX</span><span class="val">${s.adx}</span></div>
+        <div class="metric"><span class="lbl">Qty</span><span class="val">${s.qty}</span></div>
+      </div>
+      <div class="rr-bar"><div class="rr-fill" style="width:${rrPct}%"></div></div>
+      ${s.rationale ? `<div class="card-rationale">${s.rationale}</div>` : ''}
+      <div class="card-footer">
+        <span class="news-badge news-${s.news_sentiment || 'neutral'}">
+          ${s.news_sentiment === 'positive' ? '📈' : s.news_sentiment === 'negative' ? '📉' : '📰'} ${s.news_sentiment || 'neutral'}
+        </span>
+        ${s.pattern_confidence ? `<span class="pattern-badge">🔮 ${s.pattern_confidence} ${s.pattern_wr ? '(' + (s.pattern_wr * 100).toFixed(0) + '% WR)' : ''}</span>` : ''}
+        ${s.sideways_layers != null ? `<span style="font-size:10px;color:var(--muted)">🛡️ ${s.sideways_layers}/5 layers</span>` : ''}
+      </div>
+    </div>`
+  }).join('')
+}
+
+function renderPositions(positions) {
+  const container = document.getElementById('positions-list')
+  if (!positions.length) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">📂</div><div class="title">No Open Positions</div><div class="sub">Place a trade to see it here</div></div>'
+    return
+  }
+  const totalPnl = positions.reduce((sum, p) => sum + (p.pnl || 0), 0)
+  container.innerHTML = `<div style="text-align:right;margin-bottom:12px;font-size:13px">
+    Total P&L: <strong style="color:${totalPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${totalPnl >= 0 ? '+' : ''}₹${totalPnl.toFixed(0)}</strong>
+  </div>` + positions.map(p => `
+    <div class="pos-row fade-in">
+      <div>
+        <strong>${p.tradingsymbol}</strong>
+        <div style="font-size:11px;color:var(--muted)">${p.product} · ${p.quantity} shares</div>
+      </div>
+      <div style="text-align:right">
+        <div class="pos-pnl ${p.pnl >= 0 ? 'pos' : 'neg'}">₹${p.pnl >= 0 ? '+' : ''}${p.pnl?.toFixed(0)}</div>
+        <div style="font-size:11px;color:var(--muted)">@ ₹${p.average_price?.toFixed(2)}</div>
+      </div>
+    </div>`).join('')
+}
+
+// ─── Select Setup → Load AI Analysis ─────────────────────────────────────────
+async function selectSetup(index, type) {
+  const setups = type === 'swing' ? swingData : intradayData
+  const setup = setups[index]
+  if (!setup) return
+
+  currentSetupForOrder = setup
+
+  document.querySelectorAll('.setup-card').forEach(c => c.classList.remove('selected'))
+  const card = document.getElementById(`card-${index}`)
+  if (card) card.classList.add('selected')
+
+  // Show order panel
+  const risk = setup.entry - setup.stop
+  const rr = risk > 0 ? ((setup.target - setup.entry) / risk).toFixed(1) : '—'
+  document.getElementById('order-rows').innerHTML = `
+    <div class="order-row"><span class="lbl">Symbol</span><strong>${setup.symbol}</strong></div>
+    <div class="order-row"><span class="lbl">Sector</span><strong>${setup.sector || '—'}</strong></div>
+    <div class="order-row"><span class="lbl">Entry</span><strong>₹${setup.entry?.toFixed(2)}</strong></div>
+    <div class="order-row"><span class="lbl">Stop Loss</span><strong style="color:var(--red)">₹${setup.stop?.toFixed(2)}</strong></div>
+    <div class="order-row"><span class="lbl">Target</span><strong style="color:var(--green)">₹${setup.target?.toFixed(2)}</strong></div>
+    <div class="order-row"><span class="lbl">Qty</span><strong>${setup.qty} shares</strong></div>
+    <div class="order-row"><span class="lbl">Risk</span><strong style="color:var(--red)">₹${setup.risk_amount?.toFixed(0)}</strong></div>
+    <div class="order-row"><span class="lbl">R:R</span><strong>${rr}×</strong></div>
+  `
+  document.getElementById('order-panel').style.display = 'block'
+
+  // Load AI analysis
+  const aiBox = document.getElementById('ai-text')
+  aiBox.textContent = '⏳ Loading AI analysis for ' + setup.symbol + '...'
+
+  try {
+    const r = await fetch(`${backendUrl}/api/analyze/stock/${setup.symbol}`, { method: 'POST' })
+    const data = await r.json()
+    aiBox.textContent = data.analysis || 'No analysis available.'
+    document.getElementById('ai-updated').textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN')
+  } catch (e) {
+    aiBox.textContent = setup.rationale || 'Analysis unavailable — check backend connection.'
+  }
+}
+
+// ─── Order Modal ──────────────────────────────────────────────────────────────
+function openOrderModal() {
+  if (!currentSetupForOrder) return
+  const s = currentSetupForOrder
+  document.getElementById('modal-symbol').textContent = s.symbol
+  const risk = s.entry - s.stop
+  const rr = risk > 0 ? ((s.target - s.entry) / risk).toFixed(1) : '—'
+  document.getElementById('modal-details').innerHTML = `
+    <div class="modal-row"><span>Entry Price</span><strong>₹${s.entry?.toFixed(2)}</strong></div>
+    <div class="modal-row"><span>Stop Loss</span><strong style="color:var(--red)">₹${s.stop?.toFixed(2)}</strong></div>
+    <div class="modal-row"><span>Target</span><strong style="color:var(--green)">₹${s.target?.toFixed(2)}</strong></div>
+    <div class="modal-row"><span>Quantity</span><strong>${s.qty} shares</strong></div>
+    <div class="modal-row"><span>Capital at Risk</span><strong style="color:var(--red)">₹${s.risk_amount?.toFixed(0)}</strong></div>
+    <div class="modal-row"><span>R:R</span><strong>${rr}×</strong></div>
+    <div class="modal-row"><span>Product</span><strong>${s.setup_type === 'swing' ? 'CNC (Hold overnight)' : 'MIS (Intraday — exits 3:20 PM)'}</strong></div>
+    <p style="font-size:11px;color:var(--muted);margin-top:14px">Stop loss will be placed automatically. No order runs without this confirmation.</p>
+  `
+  document.getElementById('order-modal').classList.add('open')
+}
+
+async function confirmOrder() {
+  if (!currentSetupForOrder) return
+  const s = currentSetupForOrder
+  const url = s.setup_type === 'swing'
+    ? `${backendUrl}/api/order/swing`
+    : `${backendUrl}/api/order/intraday`
+
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: s.symbol, entry: s.entry, stop: s.stop, target: s.target, confirmed: true }),
+    })
+    const data = await r.json()
+    closeModal('order-modal')
+    if (data.success) {
+      alert(`✅ Order placed!\nOrder ID: ${data.order_id}\nQty: ${data.qty} @ ₹${data.entry}\n${data.gtt_id || data.sl_order_id ? '✓ Stop loss placed' : '⚠️ Place stop manually!'}`)
+      loadPositions()
+    } else {
+      alert('❌ Order failed: ' + (data.error || 'Unknown error'))
+    }
+  } catch (e) {
+    alert('Order request failed: ' + e.message)
+  }
+}
+
+// ─── Kill Switch ──────────────────────────────────────────────────────────────
+function openKillSwitch() {
+  document.getElementById('kill-confirm-input').value = ''
+  document.getElementById('kill-modal').classList.add('open')
+}
+
+async function executeKillSwitch() {
+  if (document.getElementById('kill-confirm-input').value.trim() !== 'CONFIRM') {
+    alert('Type CONFIRM exactly to proceed.')
+    return
+  }
+  try {
+    const r = await fetch(`${backendUrl}/api/killswitch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm_text: 'CONFIRM' }),
+    })
+    const data = await r.json()
+    closeModal('kill-modal')
+    alert(`Kill switch executed.\n${data.message}\n${data.exits?.length || 0} positions exited.`)
+    loadPositions()
+  } catch (e) {
+    alert('Kill switch failed: ' + e.message)
+  }
+}
+
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', ['swing','intraday','positions'][i] === tab)
+  })
+  document.getElementById('tab-swing').style.display    = tab === 'swing'    ? 'block' : 'none'
+  document.getElementById('tab-intraday').style.display  = tab === 'intraday' ? 'block' : 'none'
+  document.getElementById('tab-positions').style.display = tab === 'positions'? 'block' : 'none'
+
+  if (tab === 'swing')     renderSetups('swing-list', swingData, 'swing')
+  if (tab === 'intraday')  renderSetups('intraday-list', intradayData, 'intraday')
+  if (tab === 'positions') loadPositions()
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+
+// ─── Auto-connect ─────────────────────────────────────────────────────────────
+window.onload = () => { connect().catch(() => {}) }
+</script>
+</body>
+</html>

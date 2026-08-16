@@ -1,0 +1,187 @@
+// NiftyLens AI Screener Alerts — Pine Script v5
+// ==============================================
+// Detects swing lows, ORB breakouts, and VWAP reclaims on NSE charts.
+// Use with TradingView webhooks → screener_engine /webhook/tradingview
+//
+// SETUP:
+//   1. Open TradingView → any NSE chart (e.g. NSE:RELIANCE)
+//   2. Pine Script Editor → paste this entire file → Add to Chart
+//   3. Create Alert → Condition: "AI Screener Alerts" → select signal type
+//   4. Notifications: Webhook URL = https://your-ngrok-url.ngrok.io/webhook/tradingview
+//   5. Alert Message (paste exactly):
+//      {"symbol": "{{ticker}}", "alert_type": "swing_low", "price": {{close}}}
+//
+// SIGNALS SHOWN:
+//   ▼ Green triangle below bar = Swing Low detected
+//   ▲ Blue triangle above bar  = ORB Breakout
+//   ◆ Orange diamond           = VWAP Reclaim
+
+//@version=5
+indicator("AI Screener Alerts — NiftyLens", shorttitle="NiftyLens", overlay=true, max_labels_count=500)
+
+// ─── Inputs ───────────────────────────────────────────────────────────────────
+
+rsi_len     = input.int(14,   "RSI Length",          group="Trend Filters")
+adx_len     = input.int(14,   "ADX Length",          group="Trend Filters")
+adx_min     = input.int(20,   "Min ADX (trend req)", group="Trend Filters")
+rsi_max     = input.int(48,   "Max RSI for swing",   group="Trend Filters")
+
+swing_period = input.int(20,  "Swing Low Period (days)", group="Swing Setup")
+pct_from_low = input.float(3.0, "Max % Above 20d Low",  group="Swing Setup", minval=0.1, maxval=10.0)
+rr_min       = input.float(2.0, "Min Risk:Reward",       group="Swing Setup")
+
+orb_period   = input.int(6,   "ORB Bars (5min × 6 = 30min)", group="ORB Setup")
+vol_mult     = input.float(1.5, "Volume Multiplier for ORB",  group="ORB Setup")
+
+show_swing   = input.bool(true, "Show Swing Low Signals",  group="Display")
+show_orb     = input.bool(true, "Show ORB Breakout Signals",group="Display")
+show_vwap    = input.bool(true, "Show VWAP Reclaim Signals",group="Display")
+show_levels  = input.bool(true, "Show Stop/Target Levels",  group="Display")
+
+// ─── Indicators ───────────────────────────────────────────────────────────────
+
+// RSI
+rsi_val = ta.rsi(close, rsi_len)
+
+// ADX (manual via directional movement)
+[dmi_pos, dmi_neg, adx_val] = ta.dmi(adx_len, adx_len)
+
+// VWAP
+vwap_val = ta.vwap(hlc3)
+
+// Bollinger Band Width (sideways filter)
+bb_basis = ta.sma(close, 20)
+bb_upper = bb_basis + 2 * ta.stdev(close, 20)
+bb_lower = bb_basis - 2 * ta.stdev(close, 20)
+bbw      = (bb_upper - bb_lower) / bb_basis
+
+// Swing levels
+swing_low_20  = ta.lowest(low, swing_period)
+swing_high_20 = ta.highest(high, swing_period)
+
+// Volume ratio
+vol_avg = ta.sma(volume, 20)
+vol_ratio = volume / vol_avg
+
+// ORB (Opening Range — first N bars of session)
+var float orb_high_val = na
+var float orb_low_val  = na
+is_new_session = ta.change(time("D")) != 0
+orb_bar_count = ta.barssince(is_new_session)
+
+if is_new_session
+    orb_high_val := high
+    orb_low_val  := low
+else if orb_bar_count < orb_period
+    orb_high_val := math.max(orb_high_val, high)
+    orb_low_val  := math.min(orb_low_val, low)
+
+// Sideways filter — skip signals when market is choppy
+is_sideways = adx_val < adx_min and bbw < 0.04
+
+// ─── Swing Low Signal ─────────────────────────────────────────────────────────
+
+pct_above_low  = (close - swing_low_20) / swing_low_20 * 100
+entry_price    = close * 1.001
+stop_price     = swing_low_20 * 0.985
+target_price   = swing_high_20
+risk_val       = entry_price - stop_price
+reward_val     = target_price - entry_price
+rr_ratio       = reward_val / math.max(risk_val, 0.01)
+
+swing_signal = (
+  not is_sideways and
+  pct_above_low <= pct_from_low and
+  rsi_val <= rsi_max and
+  adx_val >= adx_min and
+  rr_ratio >= rr_min
+)
+
+// ─── ORB Breakout Signal ──────────────────────────────────────────────────────
+
+orb_breakout = (
+  not is_sideways and
+  orb_bar_count >= orb_period and
+  close > orb_high_val and
+  vol_ratio >= vol_mult and
+  rsi_val > 50
+)
+
+// ─── VWAP Reclaim Signal ──────────────────────────────────────────────────────
+
+vwap_reclaim = (
+  not is_sideways and
+  close > vwap_val and
+  close[1] <= vwap_val[1] and   // Just crossed above
+  vol_ratio >= 1.2 and
+  adx_val >= adx_min
+)
+
+// ─── Plot Signals ─────────────────────────────────────────────────────────────
+
+// Swing Low — green triangle below bar
+plotshape(
+  show_swing and swing_signal,
+  title="Swing Low",
+  style=shape.triangleup,
+  location=location.belowbar,
+  color=color.new(#00c853, 0),
+  size=size.small,
+  text="SW"
+)
+
+// ORB Breakout — blue triangle above bar
+plotshape(
+  show_orb and orb_breakout,
+  title="ORB Breakout",
+  style=shape.triangledown,
+  location=location.abovebar,
+  color=color.new(#2962ff, 0),
+  size=size.small,
+  text="ORB"
+)
+
+// VWAP Reclaim — orange diamond
+plotshape(
+  show_vwap and vwap_reclaim,
+  title="VWAP Reclaim",
+  style=shape.diamond,
+  location=location.abovebar,
+  color=color.new(#ff6d00, 0),
+  size=size.small,
+  text="VP"
+)
+
+// ─── VWAP Line ────────────────────────────────────────────────────────────────
+
+plot(vwap_val, title="VWAP", color=color.new(#ff6d00, 40), linewidth=1)
+
+// ─── Swing Entry / Stop / Target Lines ────────────────────────────────────────
+
+if show_levels and swing_signal
+    label.new(
+      bar_index, low * 0.998,
+      text="Entry: " + str.tostring(math.round(entry_price, 2)) +
+           "\nStop: "  + str.tostring(math.round(stop_price, 2)) +
+           "\nTgt: "   + str.tostring(math.round(target_price, 2)) +
+           "\nR:R "    + str.tostring(math.round(rr_ratio, 1)) + "x",
+      color=color.new(#1b5e20, 10),
+      textcolor=color.white,
+      style=label.style_label_up,
+      size=size.small
+    )
+
+// ─── Background: Sideways Market Warning ─────────────────────────────────────
+
+bgcolor(is_sideways ? color.new(color.yellow, 92) : na, title="Sideways Warning")
+
+// ─── ORB Levels ───────────────────────────────────────────────────────────────
+
+plot(not na(orb_high_val) ? orb_high_val : na, title="ORB High", color=color.new(#2962ff, 60), linewidth=1, style=plot.style_circles)
+plot(not na(orb_low_val)  ? orb_low_val  : na, title="ORB Low",  color=color.new(#e53935, 60), linewidth=1, style=plot.style_circles)
+
+// ─── Alert Conditions ─────────────────────────────────────────────────────────
+
+alertcondition(swing_signal,  title="Swing Low Detected",  message="NiftyLens Swing Low: {{ticker}} @ {{close}}")
+alertcondition(orb_breakout,  title="ORB Breakout",        message="NiftyLens ORB Breakout: {{ticker}} @ {{close}}")
+alertcondition(vwap_reclaim,  title="VWAP Reclaim",        message="NiftyLens VWAP Reclaim: {{ticker}} @ {{close}}")
